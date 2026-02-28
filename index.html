@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monkey Tag Online</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; overflow: hidden; font-family: 'Courier New', monospace; }
+  #canvas { display: block; width: 100vw; height: 100vh; }
+
+  #ui {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+
+  #menu {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(10,20,10,0.97);
+    border: 2px solid #00ff44;
+    border-radius: 4px;
+    padding: 40px 50px;
+    text-align: center;
+    z-index: 100;
+    pointer-events: all;
+    box-shadow: 0 0 40px rgba(0,255,68,0.3), inset 0 0 60px rgba(0,0,0,0.8);
+    min-width: 340px;
+  }
+  #menu h1 {
+    font-size: 2.4rem; font-weight: 900; letter-spacing: 0.15em;
+    color: #00ff44; text-shadow: 0 0 20px #00ff44;
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  #menu .subtitle {
+    color: #445544; font-size: 0.8rem; letter-spacing: 0.3em;
+    text-transform: uppercase; margin-bottom: 32px;
+  }
+
+  .input-group { margin-bottom: 16px; text-align: left; }
+  .input-group label { color: #668866; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .input-group input {
+    width: 100%; padding: 12px 16px;
+    background: #0d1a0d; border: 1px solid #224422;
+    color: #00ff44; font-family: 'Courier New', monospace; font-size: 1rem;
+    border-radius: 2px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .input-group input:focus { border-color: #00ff44; box-shadow: 0 0 10px rgba(0,255,68,0.2); }
+
+  .btn {
+    width: 100%; padding: 14px; margin-top: 8px;
+    background: transparent; border: 2px solid #00ff44;
+    color: #00ff44; font-family: 'Courier New', monospace;
+    font-size: 0.95rem; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; cursor: pointer; border-radius: 2px;
+    transition: all 0.15s;
+    pointer-events: all;
+  }
+  .btn:hover { background: #00ff44; color: #000; box-shadow: 0 0 20px rgba(0,255,68,0.5); }
+  .btn.secondary { border-color: #224422; color: #446644; margin-top: 8px; }
+  .btn.secondary:hover { border-color: #00ff44; color: #00ff44; background: transparent; box-shadow: none; }
+
+  #hud {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; display: none;
+  }
+  #controls-hint {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    color: #335533; font-size: 0.7rem; letter-spacing: 0.15em; text-align: center;
+    text-transform: uppercase;
+  }
+  #player-count {
+    position: fixed; top: 20px; right: 20px;
+    color: #00ff44; font-size: 0.8rem; letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(0,255,68,0.5);
+  }
+  #lobby-code {
+    position: fixed; top: 20px; left: 20px;
+    color: #335533; font-size: 0.7rem; letter-spacing: 0.1em;
+  }
+  #crosshair {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 4px; height: 4px; background: rgba(255,255,255,0.4); border-radius: 50%;
+  }
+  #status {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    color: #00ff44; font-size: 0.8rem; letter-spacing: 0.1em;
+    text-shadow: 0 0 10px #00ff44; opacity: 0; transition: opacity 0.5s;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="menu">
+  <h1>🦍 Monkey Tag</h1>
+  <div class="subtitle">online · multiplayer</div>
+  <div class="input-group">
+    <label>Your Name</label>
+    <input type="text" id="nameInput" placeholder="Enter name..." maxlength="16" value="Monkey">
+  </div>
+  <button class="btn" id="joinPublicBtn">▶ Join Public Lobby</button>
+  <button class="btn secondary" id="hostBtn">⊕ Host Private Lobby</button>
+  <div id="joinCodeGroup" style="display:none; margin-top:16px;">
+    <div class="input-group">
+      <label>Lobby Code</label>
+      <input type="text" id="codeInput" placeholder="Enter lobby code..." maxlength="8">
+    </div>
+    <button class="btn" id="joinPrivateBtn">→ Join</button>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="crosshair"></div>
+  <div id="player-count">Players: 1</div>
+  <div id="lobby-code"></div>
+  <div id="controls-hint">WASD — Move &nbsp;·&nbsp; SPACE — Jump &nbsp;·&nbsp; Mouse — Look &nbsp;·&nbsp; ESC — Menu</div>
+  <div id="status"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const SERVER_URL = window.location.hostname === 'localhost'
+  ? 'ws://localhost:3001'
+  : 'wss://' + window.location.hostname.replace('vercel.app', 'vercel.app') + '/ws';
+
+// For Vercel you'll need a separate WebSocket server (e.g. Railway/Render)
+// Replace this URL with your deployed WebSocket server:
+const WS_SERVER = 'wss://your-ws-server.railway.app'; // <-- CHANGE THIS
+
+// ─── THREE.JS SCENE ───────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x87ceeb);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x87ceeb, 30, 120);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 1.6, 0);
+
+// Lighting
+const sun = new THREE.DirectionalLight(0xfff5e0, 1.2);
+sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.far = 150;
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x4488bb, 0.6));
+
+// Ground
+const groundGeo = new THREE.PlaneGeometry(200, 200);
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x2d5a1b });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Trees / Platforms
+function makeTree(x, z) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.3, 0.4, 4, 8),
+    new THREE.MeshLambertMaterial({ color: 0x6b3a1f })
+  );
+  trunk.position.y = 2; trunk.castShadow = true;
+  const top = new THREE.Mesh(
+    new THREE.SphereGeometry(2.5, 8, 6),
+    new THREE.MeshLambertMaterial({ color: 0x1a6b2a })
+  );
+  top.position.y = 5.5; top.castShadow = true;
+  g.add(trunk, top);
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+
+const treePositions = [[-10,8],[10,8],[-15,0],[15,0],[-8,-10],[8,-10],[0,15],[-20,15],[20,-5]];
+treePositions.forEach(([x,z]) => makeTree(x, z));
+
+// Platforms
+function makePlatform(x, y, z, w=4, h=0.5, d=4, color=0x8b6914) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+const platforms = [
+  makePlatform(0, 0, 0, 200, 0.2, 200, 0x2d5a1b), // not used for collision, ground handles it
+  makePlatform(-5, 2, -5),
+  makePlatform(5, 4, 0),
+  makePlatform(-3, 6, 5),
+  makePlatform(8, 3, -8),
+  makePlatform(-10, 5, -10),
+  makePlatform(0, 7, -12),
+  makePlatform(12, 8, 5),
+];
+
+// ─── PLAYER ───────────────────────────────────────────────────────────────────
+function createMonkey(color=0xff6600, name='Player') {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+
+  // Body
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), mat);
+  body.position.y = 0.9;
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), mat);
+  head.position.y = 1.6;
+  // Face
+  const faceMat = new THREE.MeshLambertMaterial({ color: 0xffaa77 });
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), faceMat);
+  face.position.set(0, 1.62, 0.28);
+  // Eyes
+  const eyeMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
+  const eyeR = eyeL.clone();
+  eyeL.position.set(-0.1, 1.68, 0.38);
+  eyeR.position.set(0.1, 1.68, 0.38);
+  // Arms
+  const armGeo = new THREE.CapsuleGeometry ? new THREE.CylinderGeometry(0.1,0.08,0.8,6) : new THREE.CylinderGeometry(0.1,0.08,0.8,6);
+  const armL = new THREE.Mesh(armGeo, mat);
+  const armR = armL.clone();
+  armL.position.set(-0.6, 0.9, 0); armL.rotation.z = 0.4;
+  armR.position.set(0.6, 0.9, 0); armR.rotation.z = -0.4;
+  // Legs
+  const legGeo = new THREE.CylinderGeometry(0.1,0.1,0.6,6);
+  const legL = new THREE.Mesh(legGeo, mat);
+  const legR = legL.clone();
+  legL.position.set(-0.2, 0.25, 0);
+  legR.position.set(0.2, 0.25, 0);
+
+  g.add(body, head, face, eyeL, eyeR, armL, armR, legL, legR);
+
+  // Name tag
+  const canvas2d = document.createElement('canvas');
+  canvas2d.width = 256; canvas2d.height = 64;
+  const ctx = canvas2d.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.roundRect(4,4,248,56,8);
+  ctx.fill();
+  ctx.fillStyle = '#00ff44';
+  ctx.font = 'bold 28px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas2d);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sprite.scale.set(2, 0.5, 1);
+  sprite.position.y = 2.4;
+  g.add(sprite);
+  g.userData.nameSprite = sprite;
+  g.userData.nameCanvas = canvas2d;
+  g.userData.nameCtx = ctx;
+  g.userData.nameTex = tex;
+
+  g.castShadow = true;
+  return g;
+}
+
+function updateNameTag(monkey, name) {
+  const ctx = monkey.userData.nameCtx;
+  const canvas2d = monkey.userData.nameCanvas;
+  ctx.clearRect(0,0,256,64);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(4,4,248,56,8);
+  else ctx.rect(4,4,248,56);
+  ctx.fill();
+  ctx.fillStyle = '#00ff44';
+  ctx.font = 'bold 28px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name.substring(0,16), 128, 32);
+  monkey.userData.nameTex.needsUpdate = true;
+}
+
+// ─── LOCAL PLAYER ─────────────────────────────────────────────────────────────
+const player = {
+  pos: new THREE.Vector3(0, 1.6, 0),
+  vel: new THREE.Vector3(),
+  yaw: 0,
+  pitch: 0,
+  onGround: false,
+  name: 'Monkey',
+  color: Math.random() * 0xffffff | 0,
+  id: null
+};
+
+// Player body (visible to others, hide for first person by making it invisible locally)
+const localMonkey = createMonkey(player.color, player.name);
+localMonkey.visible = false; // first person - don't render own body
+scene.add(localMonkey);
+
+// Camera rig
+const camHolder = new THREE.Object3D();
+camHolder.add(camera);
+scene.add(camHolder);
+
+// ─── REMOTE PLAYERS ───────────────────────────────────────────────────────────
+const remotePlayers = {};
+
+function addRemotePlayer(id, data) {
+  const monkey = createMonkey(data.color || 0xff6600, data.name || 'Player');
+  scene.add(monkey);
+  remotePlayers[id] = { monkey, data };
+}
+
+function removeRemotePlayer(id) {
+  if (remotePlayers[id]) {
+    scene.remove(remotePlayers[id].monkey);
+    delete remotePlayers[id];
+  }
+}
+
+function updateRemotePlayer(id, data) {
+  if (!remotePlayers[id]) {
+    addRemotePlayer(id, data);
+  }
+  const rp = remotePlayers[id];
+  rp.monkey.position.set(data.x, data.y - 1.6, data.z);
+  rp.monkey.rotation.y = data.yaw || 0;
+  if (data.name && data.name !== rp.data.name) {
+    updateNameTag(rp.monkey, data.name);
+    rp.data.name = data.name;
+  }
+}
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.code] = true; });
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let pointerLocked = false;
+let mouseDX = 0, mouseDY = 0;
+
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = !!document.pointerLockElement;
+});
+document.addEventListener('mousemove', e => {
+  if (!pointerLocked) return;
+  mouseDX += e.movementX;
+  mouseDY += e.movementY;
+});
+
+canvas.addEventListener('click', () => {
+  if (document.getElementById('hud').style.display !== 'none') {
+    canvas.requestPointerLock();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Escape' && document.getElementById('hud').style.display !== 'none') {
+    document.exitPointerLock();
+    showMenu();
+  }
+});
+
+// ─── PHYSICS ──────────────────────────────────────────────────────────────────
+const GRAVITY = -20;
+const SPEED = 8;
+const JUMP = 9;
+
+function checkGround(pos) {
+  if (pos.y <= 1.6) { pos.y = 1.6; return true; }
+  // Simple platform collision
+  for (let i = 1; i < platforms.length; i++) {
+    const p = platforms[i];
+    const px = p.position.x, py = p.position.y, pz = p.position.z;
+    const geo = p.geometry.parameters;
+    const hw = (geo.width || 4) / 2, hd = (geo.depth || 4) / 2, hh = (geo.height || 0.5) / 2;
+    if (
+      pos.x > px - hw && pos.x < px + hw &&
+      pos.z > pz - hd && pos.z < pz + hd &&
+      pos.y > py + hh - 0.1 && pos.y < py + hh + 0.8
+    ) {
+      pos.y = py + hh + 1.6;
+      return true;
+    }
+  }
+  return false;
+}
+
+// ─── WEBSOCKET ────────────────────────────────────────────────────────────────
+let ws = null;
+let connected = false;
+let lobbyId = 'public';
+
+function connect(lobby) {
+  lobbyId = lobby;
+  ws = new WebSocket(WS_SERVER);
+
+  ws.onopen = () => {
+    connected = true;
+    ws.send(JSON.stringify({
+      type: 'join',
+      lobby: lobbyId,
+      name: player.name,
+      color: player.color
+    }));
+    showStatus('Connected!');
+  };
+
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+
+    switch (msg.type) {
+      case 'welcome':
+        player.id = msg.id;
+        document.getElementById('lobby-code').textContent = 'Lobby: ' + (lobbyId === 'public' ? 'PUBLIC' : lobbyId.toUpperCase());
+        break;
+      case 'state':
+        // Full lobby state
+        const ids = Object.keys(msg.players);
+        // Remove players no longer present
+        Object.keys(remotePlayers).forEach(id => {
+          if (!msg.players[id]) removeRemotePlayer(id);
+        });
+        ids.forEach(id => {
+          if (id !== player.id) updateRemotePlayer(id, msg.players[id]);
+        });
+        document.getElementById('player-count').textContent = 'Players: ' + ids.length;
+        break;
+      case 'player_join':
+        if (msg.id !== player.id) {
+          addRemotePlayer(msg.id, msg);
+          showStatus(msg.name + ' joined');
+        }
+        break;
+      case 'player_leave':
+        removeRemotePlayer(msg.id);
+        showStatus(msg.name + ' left');
+        break;
+      case 'player_move':
+        if (msg.id !== player.id) updateRemotePlayer(msg.id, msg);
+        document.getElementById('player-count').textContent = 'Players: ' + (Object.keys(remotePlayers).length + 1);
+        break;
+    }
+  };
+
+  ws.onclose = () => {
+    connected = false;
+    showStatus('Disconnected');
+  };
+
+  ws.onerror = () => {
+    showStatus('Connection failed - check WS server URL');
+  };
+}
+
+function sendMove() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: 'move',
+    x: player.pos.x,
+    y: player.pos.y,
+    z: player.pos.z,
+    yaw: player.yaw,
+    name: player.name
+  }));
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function showMenu() {
+  document.getElementById('menu').style.display = 'block';
+  document.getElementById('hud').style.display = 'none';
+}
+
+function hideMenu() {
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('hud').style.display = 'block';
+  canvas.requestPointerLock();
+}
+
+function showStatus(msg) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => el.style.opacity = '0', 3000);
+}
+
+document.getElementById('joinPublicBtn').addEventListener('click', () => {
+  player.name = document.getElementById('nameInput').value.trim() || 'Monkey';
+  updateNameTag(localMonkey, player.name);
+  hideMenu();
+  connect('public');
+});
+
+document.getElementById('hostBtn').addEventListener('click', () => {
+  const code = Math.random().toString(36).substring(2,8).toUpperCase();
+  player.name = document.getElementById('nameInput').value.trim() || 'Monkey';
+  updateNameTag(localMonkey, player.name);
+  const joinGroup = document.getElementById('joinCodeGroup');
+  joinGroup.style.display = joinGroup.style.display === 'none' ? 'block' : 'none';
+  if (joinGroup.style.display === 'block') {
+    document.getElementById('codeInput').value = code;
+    showStatus('Share code: ' + code);
+  }
+  hideMenu();
+  connect(code.toLowerCase());
+});
+
+document.getElementById('joinPrivateBtn').addEventListener('click', () => {
+  const code = document.getElementById('codeInput').value.trim().toLowerCase();
+  if (!code) return;
+  player.name = document.getElementById('nameInput').value.trim() || 'Monkey';
+  updateNameTag(localMonkey, player.name);
+  hideMenu();
+  connect(code);
+});
+
+// ─── GAME LOOP ────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+let sendTimer = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  sendTimer += dt;
+
+  if (document.getElementById('hud').style.display !== 'none') {
+    // Mouse look
+    const sens = 0.002;
+    player.yaw -= mouseDX * sens;
+    player.pitch -= mouseDY * sens;
+    player.pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, player.pitch));
+    mouseDX = 0; mouseDY = 0;
+
+    // Movement
+    const moveDir = new THREE.Vector3();
+    if (keys['KeyW'] || keys['ArrowUp']) moveDir.z -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) moveDir.z += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) moveDir.x -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) moveDir.x += 1;
+    moveDir.normalize();
+
+    // Rotate movement by yaw
+    const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+    const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+    const move = forward.clone().multiplyScalar(-moveDir.z).add(right.clone().multiplyScalar(moveDir.x));
+
+    player.vel.x = move.x * SPEED;
+    player.vel.z = move.z * SPEED;
+
+    // Jump
+    if ((keys['Space']) && player.onGround) {
+      player.vel.y = JUMP;
+      player.onGround = false;
+    }
+
+    // Gravity
+    player.vel.y += GRAVITY * dt;
+
+    // Integrate
+    player.pos.x += player.vel.x * dt;
+    player.pos.y += player.vel.y * dt;
+    player.pos.z += player.vel.z * dt;
+
+    // Ground check
+    const wasOnGround = player.onGround;
+    player.onGround = checkGround(player.pos);
+    if (player.onGround) player.vel.y = Math.max(0, player.vel.y);
+
+    // Boundary
+    player.pos.x = Math.max(-90, Math.min(90, player.pos.x));
+    player.pos.z = Math.max(-90, Math.min(90, player.pos.z));
+
+    // Camera
+    camHolder.position.copy(player.pos);
+    camHolder.rotation.y = player.yaw;
+    camera.rotation.x = player.pitch;
+
+    // Animate remote monkeys (bob)
+    Object.values(remotePlayers).forEach(({monkey}) => {
+      monkey.children.forEach((c, i) => {
+        if (i >= 6 && i <= 9) { // arms and legs
+          c.rotation.x = Math.sin(Date.now() * 0.005) * 0.3;
+        }
+      });
+    });
+
+    // Send position
+    if (sendTimer > 0.05) {
+      sendMove();
+      sendTimer = 0;
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
