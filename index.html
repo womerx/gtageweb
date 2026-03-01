@@ -566,35 +566,205 @@ const grid = new THREE.GridHelper(200, 40, 0x2a5a0a, 0x2a5a0a);
 grid.position.y = 0.01;
 scene.add(grid);
 
-// Trees
-[[5,5],[-5,8],[10,-3],[-8,-6],[15,10],[-12,4],[3,-12],[-6,15],[18,-8],[-15,-10],
- [7,18],[-4,-16],[12,12],[-10,-13],[20,5],[-18,8],[6,-18],[-7,20],[14,-14],[-16,3]
-].forEach(([x,z]) => {
-  const tr = new THREE.Mesh(new THREE.CylinderGeometry(.3,.5,3,7), new THREE.MeshLambertMaterial({color:0x5c3317}));
-  tr.position.set(x,1.5,z); tr.castShadow=true; scene.add(tr);
-  const lv = new THREE.Mesh(new THREE.SphereGeometry(2.5,7,5), new THREE.MeshLambertMaterial({color:0x2d6a2d}));
-  lv.position.set(x,5,z); lv.castShadow=true; scene.add(lv);
-});
-
-// Platforms
+// =====================================================
+//   WORLD BUILDING
+// =====================================================
 const platforms = [];
 function mkPlat(x,y,z,w,h,d,col=0x8B6914){
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshLambertMaterial({color:col}));
-  m.position.set(x,y,z); m.castShadow=m.receiveShadow=true; scene.add(m);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:col}));
+  m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;scene.add(m);
   platforms.push({x,y,z,w,h,d});
+  return m;
 }
-mkPlat(0,.25,0,10,.5,10);
-mkPlat(8,2,-5,4,.5,4,0x7a5a10); mkPlat(-8,3,5,5,.5,3,0x6a4a0a);
-mkPlat(15,4,0,3,.5,3);           mkPlat(-12,5,-8,4,.5,4,0x7a5a10);
-mkPlat(5,6,10,3,.5,5,0x6a4a0a); mkPlat(-3,8,-12,6,.5,3);
-mkPlat(0,10,0,4,.5,4,0xb8860b);
 
-for(let i=0;i<12;i++){
-  const r = new THREE.Mesh(new THREE.DodecahedronGeometry(.3+Math.random()*.6,0), new THREE.MeshLambertMaterial({color:0x777777}));
-  r.position.set((Math.random()-.5)*50,.3,(Math.random()-.5)*50);
-  r.rotation.set(Math.random(2),Math.random(2),Math.random(2));
-  r.castShadow=true; scene.add(r);
+// Helper: thin step
+function mkStep(x,y,z,w,d,col){return mkPlat(x,y,z,w,.3,d,col||0x7a5a10);}
+
+// ---- CENTRAL ARENA ----
+mkPlat(0,.25,0,14,.5,14,0x9B7520);
+
+// ---- BENCH MAKER ----
+function mkBench(x,y,z,rot=0){
+  const g=new THREE.Group();
+  // seat
+  const seat=new THREE.Mesh(new THREE.BoxGeometry(2,.15,.6),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+  seat.position.set(0,.5,0);g.add(seat);
+  // backrest
+  const back=new THREE.Mesh(new THREE.BoxGeometry(2,.6,.1),new THREE.MeshLambertMaterial({color:0x7a4a2a}));
+  back.position.set(0,.9,-.25);g.add(back);
+  // legs x4
+  [[-0.8,0.3],[-0.8,-0.3],[0.8,0.3],[0.8,-0.3]].forEach(([lx,lz])=>{
+    const leg=new THREE.Mesh(new THREE.BoxGeometry(.1,.5,.1),new THREE.MeshLambertMaterial({color:0x5c3317}));
+    leg.position.set(lx,.2,lz);g.add(leg);
+  });
+  g.position.set(x,y,z);
+  g.rotation.y=rot;
+  g.castShadow=true;
+  scene.add(g);
+  // Add bench seat as a platform
+  platforms.push({x,y:y+.5,z,w:2,h:.15,d:.6});
 }
+
+// ---- HOUSE MAKER ----
+function mkHouse(x,y,z,w=6,h=4,d=5,rot=0,wallCol=0xf5e6c8,roofCol=0xb03a2e){
+  const g=new THREE.Group();
+  // Walls
+  const walls=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:wallCol}));
+  walls.position.y=h/2;
+  walls.castShadow=true;walls.receiveShadow=true;g.add(walls);
+  // Roof (prism-like using a scaled box)
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.72,h*.55,4),new THREE.MeshLambertMaterial({color:roofCol}));
+  roof.position.y=h+h*.22;
+  roof.rotation.y=Math.PI/4;
+  roof.castShadow=true;g.add(roof);
+  // Door
+  const door=new THREE.Mesh(new THREE.BoxGeometry(1,2,.05),new THREE.MeshLambertMaterial({color:0x6b3a1f}));
+  door.position.set(0,1,d/2+.01);g.add(door);
+  // Windows x2
+  [-1.5,1.5].forEach(wx=>{
+    const win=new THREE.Mesh(new THREE.BoxGeometry(.8,.8,.05),new THREE.MeshLambertMaterial({color:0x87ceeb,transparent:true,opacity:.6}));
+    win.position.set(wx,h*.6,d/2+.01);g.add(win);
+  });
+  g.position.set(x,y,z);
+  g.rotation.y=rot;
+  scene.add(g);
+  // House floor as platform (can stand on top)
+  platforms.push({x,y:y+h,z,w:w*.9,h:.3,d:d*.9});
+}
+
+// ---- POLE/PILLAR ----
+function mkPillar(x,y,z,h,r=.3,col=0x888888){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,8),new THREE.MeshLambertMaterial({color:col}));
+  m.position.set(x,y+h/2,z);m.castShadow=true;scene.add(m);
+  platforms.push({x,y:y+h,z,w:r*2+.2,h:.2,d:r*2+.2});
+}
+
+// ---- TREES ----
+[[5,5],[-5,8],[10,-3],[-8,-6],[15,10],[-12,4],[3,-12],[-6,15],[18,-8],[-15,-10],
+ [7,18],[-4,-16],[12,12],[-10,-13],[22,5],[-18,8],[6,-18],[-7,22],[16,-14],[-16,3],
+ [25,15],[-22,12],[20,-18],[-18,22],[30,5]
+].forEach(([x,z])=>{
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.3,.5,3+Math.random()*2,7),new THREE.MeshLambertMaterial({color:0x5c3317}));
+  tr.position.set(x,1.5,z);tr.castShadow=true;scene.add(tr);
+  const lv=new THREE.Mesh(new THREE.SphereGeometry(2+Math.random()*.8,7,5),new THREE.MeshLambertMaterial({color:[0x2d6a2d,0x3a7a2a,0x256025][Math.floor(Math.random()*3)]}));
+  lv.position.set(x,5+Math.random(),z);lv.castShadow=true;scene.add(lv);
+});
+
+// -------- PARKOUR COURSE 1: STEPPING STONES (right side) --------
+const stoneColors=[0x8B6914,0x7a5a10,0x6a4a0a,0x9B7520,0xaa8030];
+let sx=8,sy=1.5,sz=-8;
+for(let i=0;i<12;i++){
+  const col=stoneColors[i%stoneColors.length];
+  mkPlat(sx,sy,sz,2+Math.random(),.3,2+Math.random(),col);
+  sx+=2.5+Math.random()*1.5;
+  sz+=(Math.random()-.5)*4;
+  sy+=0.4+Math.random()*0.5;
+}
+
+// -------- PARKOUR COURSE 2: SPIRAL TOWER (left side) --------
+for(let i=0;i<14;i++){
+  const angle=(i/14)*Math.PI*4;
+  const radius=6;
+  const px=-20+Math.cos(angle)*radius;
+  const pz=10+Math.sin(angle)*radius;
+  const py=1+i*1.1;
+  mkPlat(px,py,pz,2.5,.3,2.5,0x7a5a10);
+}
+// Top of spiral
+mkPlat(-20,17,10,5,.5,5,0xb8860b);
+mkPillar(-20,17,10,3,.4,0xb8860b);
+
+// -------- PARKOUR COURSE 3: LADDER OF DOOM (center-back) --------
+for(let i=0;i<8;i++){
+  mkStep(-5+i*1.4, 1+i*1.5, -20+i*.5, 2.5, 2.5);
+}
+// Top platform
+mkPlat(5,13.5,-16,5,.5,5,0xaa8030);
+
+// -------- PARKOUR COURSE 4: FLOATING ISLANDS --------
+mkPlat(-15,6,-15,8,.8,8,0x4a7a1a); // grass island
+// Small dirt under island
+mkPlat(-15,4.5,-15,7,.5,7,0x8B6914);
+// Trees on island
+const itr=new THREE.Mesh(new THREE.CylinderGeometry(.2,.35,2.5,7),new THREE.MeshLambertMaterial({color:0x5c3317}));
+itr.position.set(-15,7.5,-15);scene.add(itr);
+const ilv=new THREE.Mesh(new THREE.SphereGeometry(2,7,5),new THREE.MeshLambertMaterial({color:0x2d6a2d}));
+ilv.position.set(-15,10,-15);scene.add(ilv);
+// Bridge to island
+for(let i=0;i<5;i++){
+  mkPlat(-9-i*.8,5.5,-13,1.2,.2,1.2,0x8B6914);
+}
+
+// -------- PARKOUR COURSE 5: VERTICAL WALLS / WALL RUN PADS --------
+mkPlat(20,1,-10,2,.3,2,0x7a5a10);
+mkPlat(22,2.5,-10,2,.3,2,0x7a5a10);
+mkPlat(24,4,-10,2,.3,2,0x7a5a10);
+mkPlat(26,5.5,-10,2,.3,2,0x7a5a10);
+mkPlat(28,7,-10,4,.5,4,0xb8860b); // top reward
+
+// -------- PARKOUR COURSE 6: ZIG ZAG LONG JUMP --------
+const zzColors=[0x9B7520,0x8B6914,0x7a5a10];
+let zzx=-25,zzz=5,zzy=2;
+for(let i=0;i<10;i++){
+  mkPlat(zzx,zzy,zzz,3,.3,1.5,zzColors[i%3]);
+  zzx-=3.5;
+  zzz+=i%2===0?5:-5;
+  zzy+=.3;
+}
+
+// -------- HOUSES --------
+mkHouse(20,0,15, 7,4,5, 0,          0xf5e6c8,0xb03a2e);   // House 1: red roof
+mkHouse(-20,0,20, 6,4,6, Math.PI/6, 0xe8dcc0,0x2e6b3e);   // House 2: green roof
+mkHouse(0,0,-25,  8,5,6, 0,          0xd4c4a0,0x4a3520);   // House 3: dark roof
+mkHouse(-30,0,-5, 6,4,5, Math.PI/4, 0xeee0c0,0x8b2020);   // House 4: far corner
+mkHouse(30,0,-20, 7,4,6, -Math.PI/5,0xf0e8d0,0x1a4a6e);   // House 5: blue roof
+
+// -------- BENCHES (around map) --------
+mkBench(4,0,3,  0);
+mkBench(-4,0,3, Math.PI);
+mkBench(3,0,-4, Math.PI/2);
+mkBench(-3,0,-4,Math.PI/2);
+// On top of houses
+mkBench(20,4,15, Math.PI/4);
+// Near spiral tower top
+mkBench(-22,17,10, 0);
+// Near floating island
+mkBench(-17,6.5,-13, Math.PI/3);
+// Village benches
+mkBench(18,0,13, Math.PI/8);
+mkBench(22,0,13,-Math.PI/8);
+mkBench(-22,0,18, 0);
+mkBench(-18,0,22, Math.PI/2);
+// Near doom ladder
+mkBench(6,13.5,-16, 0);
+
+// -------- ROCKS / DECORATION --------
+for(let i=0;i<20;i++){
+  const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.3+Math.random()*.7,0),new THREE.MeshLambertMaterial({color:0x777777}));
+  r.position.set((Math.random()-.5)*70,.3,(Math.random()-.5)*70);
+  r.rotation.set(Math.random(2),Math.random(2),Math.random(2));
+  r.castShadow=true;scene.add(r);
+}
+
+// -------- PILLARS / ARCHES --------
+mkPillar(10,0,10,5,.4,0x888888);
+mkPillar(-10,0,10,5,.4,0x888888);
+// Arch beam
+const arch=new THREE.Mesh(new THREE.BoxGeometry(.5,20.5,.4),new THREE.MeshLambertMaterial({color:0x888888}));
+arch.position.set(0,5.25,10);arch.rotation.z=Math.PI/2;arch.castShadow=true;scene.add(arch);
+
+// -------- LAMP POSTS --------
+function mkLamp(x,z){
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.1,4,6),new THREE.MeshLambertMaterial({color:0x333333}));
+  pole.position.set(x,2,z);scene.add(pole);
+  const top=new THREE.Mesh(new THREE.SphereGeometry(.25,8,6),new THREE.MeshLambertMaterial({color:0xffff99,emissive:0xffff44,emissiveIntensity:.5}));
+  top.position.set(x,4.2,z);scene.add(top);
+  // Point light
+  const pl=new THREE.PointLight(0xffff88,.8,12);
+  pl.position.set(x,4,z);scene.add(pl);
+}
+mkLamp(5,0);mkLamp(-5,0);mkLamp(0,5);mkLamp(0,-5);
+mkLamp(18,14);mkLamp(-18,18);mkLamp(18,-18);
 
 // =====================================================
 //   MONKEY MESH
@@ -660,6 +830,8 @@ const pVel = new THREE.Vector3();
 let camPitch=0, camYaw=0, onGround=false;
 const SPEED=6, JUMP=8, GRAV=-18;
 const keys={};
+let camDist = 5; // zoomable camera distance
+const CAM_MIN = 2, CAM_MAX = 20;
 
 // Local player mesh — visible in world, body faces movement dir
 let localMesh = null;
@@ -819,8 +991,40 @@ document.addEventListener("mousemove",e=>{
 });
 
 // =====================================================
-//   PHYSICS
+//   ZOOM — scroll wheel (PC) + pinch (mobile)
 // =====================================================
+canvas.addEventListener("wheel", e => {
+  if(!isInGame) return;
+  e.preventDefault();
+  camDist += e.deltaY * 0.01;
+  camDist = Math.max(CAM_MIN, Math.min(CAM_MAX, camDist));
+}, {passive:false});
+
+// Pinch zoom
+let pinchDist0 = null;
+let pinchCamDist0 = null;
+document.addEventListener("touchstart", e => {
+  if(e.touches.length === 2){
+    pinchDist0 = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    pinchCamDist0 = camDist;
+  }
+}, {passive:true});
+document.addEventListener("touchmove", e => {
+  if(e.touches.length === 2 && pinchDist0 !== null){
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const scale = pinchDist0 / d;
+    camDist = Math.max(CAM_MIN, Math.min(CAM_MAX, pinchCamDist0 * scale));
+  }
+}, {passive:true});
+document.addEventListener("touchend", e => {
+  if(e.touches.length < 2) pinchDist0 = null;
+}, {passive:true});
 function groundY(x,z){
   let gy=0;
   platforms.forEach(p=>{
@@ -907,11 +1111,6 @@ function loop(){
   }
 
   // ---- ROBLOX-STYLE FREE LOOK CAMERA ----
-  // Camera orbits freely around player. Moving character doesn't rotate camera.
-  // Camera distance and orbit fully controlled by mouse/touch.
-  const camDist = 5;
-  // Horizontal offset uses camYaw (free look)
-  // Vertical offset uses camPitch (clamped)
   const camX = pPos.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist;
   const camY = pPos.y + 1.2 + Math.sin(camPitch) * camDist;
   const camZ = pPos.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist;
@@ -1207,7 +1406,7 @@ function enterGame(msg){
   document.getElementById("escCode").textContent=msg.code;
   document.getElementById("hudSub").textContent=msg.lobbyName||"";
 
-  pPos.set(0,2,0); pVel.set(0,0,0); camYaw=0; camPitch=0; charFaceYaw=0;
+  pPos.set(0,2,0); pVel.set(0,0,0); camYaw=0; camPitch=0; charFaceYaw=0; camDist=5;
   myHp=MAX_HP; isDead=false; attackCooldown=0;
   selectedSlot=0; selectSlot(0);
   updateMyHp(MAX_HP);
