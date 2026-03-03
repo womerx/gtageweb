@@ -102,6 +102,18 @@ input[type=color]{
 .cdot{width:6px;height:6px;border-radius:50%;background:#ff4444;transition:background .3s;}
 .cdot.on{background:#44ff88;}
 
+/* ===== MAP CARDS ===== */
+.map-card{
+  flex:1;background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:10px 6px;text-align:center;cursor:pointer;
+  transition:border-color .15s,background .15s,transform .1s;
+  -webkit-tap-highlight-color:transparent;
+}
+.map-card:active{transform:scale(.95);}
+.map-card.selected{border-color:var(--banana);background:rgba(245,200,66,.13);}
+.map-icon{font-size:1.6rem;margin-bottom:4px;}
+.map-name{font-size:.65rem;font-weight:700;color:rgba(255,255,255,.65);letter-spacing:.5px;}
+
 /* ===== ESC MENU ===== */
 #escMenu{background:rgba(0,0,0,.82);backdrop-filter:blur(10px);}
 .esc-card{
@@ -403,7 +415,22 @@ input[type=color]{
 
     <div class="tab-panel active" id="tab-create">
       <div class="flabel">Lobby Name</div>
-      <input type="text" id="lobbyName" placeholder="My Jungle" maxlength="30"/>
+      <input type="text" id="lobbyName" placeholder="My Room" maxlength="30"/>
+      <div class="flabel">Choose Map</div>
+      <div id="mapPicker" style="display:flex;gap:8px;margin-bottom:14px;">
+        <div class="map-card selected" onclick="selectMap('baseplate')" id="map-baseplate">
+          <div class="map-icon">🟩</div>
+          <div class="map-name">Baseplate</div>
+        </div>
+        <div class="map-card" onclick="selectMap('parkour')" id="map-parkour">
+          <div class="map-icon">🏃</div>
+          <div class="map-name">Easy Parkour</div>
+        </div>
+        <div class="map-card" onclick="selectMap('hangout')" id="map-hangout">
+          <div class="map-icon">🌸</div>
+          <div class="map-name">Hangout</div>
+        </div>
+      </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;margin-bottom:13px;">
         <input type="checkbox" id="isPrivate" style="width:auto;padding:0;accent-color:var(--banana);"/>
         Private Lobby
@@ -459,6 +486,7 @@ input[type=color]{
   <div id="actionBtns">
     <button class="act-btn" id="menuOpenBtn" onclick="openEsc()">☰</button>
     <button class="act-btn" id="chatBtn" onclick="openChat()">💬</button>
+    <button class="act-btn" id="editSignMobileBtn" style="display:none;width:54px;height:54px;background:rgba(212,168,90,.5);border:1.5px solid rgba(212,168,90,.7);font-size:1rem;" onclick="checkAndEditSign()">✏️</button>
     <button class="act-btn" id="jumpBtn">JUMP</button>
   </div>
 </div>
@@ -514,6 +542,22 @@ input[type=color]{
 <!-- KILL FEED -->
 <div id="killFeed"></div>
 
+<!-- SIGN EDITOR -->
+<div id="signEditor" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:180;display:none;align-items:center;justify-content:center;">
+  <div style="background:linear-gradient(145deg,rgba(139,94,60,.95),rgba(101,67,33,.95));border:2px solid #c8a060;border-radius:18px;padding:28px;width:min(340px,92vw);box-shadow:0 0 40px rgba(200,160,96,.3);">
+    <div style="font-family:'Bangers',cursive;font-size:1.6rem;color:var(--banana);text-align:center;margin-bottom:16px;letter-spacing:2px;">📋 Edit Sign</div>
+    <textarea id="signText" maxlength="80" rows="3" placeholder="Type your message…"
+      style="width:100%;background:rgba(0,0,0,.4);border:1.5px solid rgba(255,255,255,.2);border-radius:10px;color:var(--cream);font-family:'Nunito',sans-serif;font-size:1rem;padding:10px;resize:none;outline:none;"></textarea>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveSign()">✅ Save</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="closeSign()">✕ Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- INTERACT PROMPT -->
+<div id="interactPrompt" style="display:none;position:fixed;bottom:200px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:8px 16px;font-size:.78rem;color:rgba(255,255,255,.8);z-index:92;pointer-events:none;backdrop-filter:blur(4px);"></div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // =====================================================
@@ -567,204 +611,316 @@ grid.position.y = 0.01;
 scene.add(grid);
 
 // =====================================================
-//   WORLD BUILDING
+//   WORLD BUILDING HELPERS
 // =====================================================
 const platforms = [];
+let worldObjects = []; // all dynamic scene objects per map
+let signObjects  = []; // {mesh, labelSprite, text, position}
+let currentMapId = 'baseplate';
+
 function mkPlat(x,y,z,w,h,d,col=0x8B6914){
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:col}));
   m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;scene.add(m);
   platforms.push({x,y,z,w,h,d});
+  worldObjects.push(m);
   return m;
 }
-
-// Helper: thin step
 function mkStep(x,y,z,w,d,col){return mkPlat(x,y,z,w,.3,d,col||0x7a5a10);}
 
-// ---- CENTRAL ARENA ----
-mkPlat(0,.25,0,14,.5,14,0x9B7520);
-
-// ---- BENCH MAKER ----
 function mkBench(x,y,z,rot=0){
   const g=new THREE.Group();
-  // seat
   const seat=new THREE.Mesh(new THREE.BoxGeometry(2,.15,.6),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
   seat.position.set(0,.5,0);g.add(seat);
-  // backrest
   const back=new THREE.Mesh(new THREE.BoxGeometry(2,.6,.1),new THREE.MeshLambertMaterial({color:0x7a4a2a}));
   back.position.set(0,.9,-.25);g.add(back);
-  // legs x4
   [[-0.8,0.3],[-0.8,-0.3],[0.8,0.3],[0.8,-0.3]].forEach(([lx,lz])=>{
     const leg=new THREE.Mesh(new THREE.BoxGeometry(.1,.5,.1),new THREE.MeshLambertMaterial({color:0x5c3317}));
     leg.position.set(lx,.2,lz);g.add(leg);
   });
-  g.position.set(x,y,z);
-  g.rotation.y=rot;
-  g.castShadow=true;
-  scene.add(g);
-  // Add bench seat as a platform
+  g.position.set(x,y,z);g.rotation.y=rot;g.castShadow=true;
+  scene.add(g);worldObjects.push(g);
   platforms.push({x,y:y+.5,z,w:2,h:.15,d:.6});
 }
 
-// ---- HOUSE MAKER ----
 function mkHouse(x,y,z,w=6,h=4,d=5,rot=0,wallCol=0xf5e6c8,roofCol=0xb03a2e){
   const g=new THREE.Group();
-  // Walls
   const walls=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:wallCol}));
-  walls.position.y=h/2;
-  walls.castShadow=true;walls.receiveShadow=true;g.add(walls);
-  // Roof (prism-like using a scaled box)
+  walls.position.y=h/2;walls.castShadow=true;walls.receiveShadow=true;g.add(walls);
   const roof=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*.72,h*.55,4),new THREE.MeshLambertMaterial({color:roofCol}));
-  roof.position.y=h+h*.22;
-  roof.rotation.y=Math.PI/4;
-  roof.castShadow=true;g.add(roof);
-  // Door
+  roof.position.y=h+h*.22;roof.rotation.y=Math.PI/4;roof.castShadow=true;g.add(roof);
   const door=new THREE.Mesh(new THREE.BoxGeometry(1,2,.05),new THREE.MeshLambertMaterial({color:0x6b3a1f}));
   door.position.set(0,1,d/2+.01);g.add(door);
-  // Windows x2
   [-1.5,1.5].forEach(wx=>{
     const win=new THREE.Mesh(new THREE.BoxGeometry(.8,.8,.05),new THREE.MeshLambertMaterial({color:0x87ceeb,transparent:true,opacity:.6}));
     win.position.set(wx,h*.6,d/2+.01);g.add(win);
   });
-  g.position.set(x,y,z);
-  g.rotation.y=rot;
-  scene.add(g);
-  // House floor as platform (can stand on top)
+  g.position.set(x,y,z);g.rotation.y=rot;scene.add(g);worldObjects.push(g);
   platforms.push({x,y:y+h,z,w:w*.9,h:.3,d:d*.9});
 }
 
-// ---- POLE/PILLAR ----
 function mkPillar(x,y,z,h,r=.3,col=0x888888){
   const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,8),new THREE.MeshLambertMaterial({color:col}));
-  m.position.set(x,y+h/2,z);m.castShadow=true;scene.add(m);
+  m.position.set(x,y+h/2,z);m.castShadow=true;scene.add(m);worldObjects.push(m);
   platforms.push({x,y:y+h,z,w:r*2+.2,h:.2,d:r*2+.2});
 }
 
-// ---- TREES ----
-[[5,5],[-5,8],[10,-3],[-8,-6],[15,10],[-12,4],[3,-12],[-6,15],[18,-8],[-15,-10],
- [7,18],[-4,-16],[12,12],[-10,-13],[22,5],[-18,8],[6,-18],[-7,22],[16,-14],[-16,3],
- [25,15],[-22,12],[20,-18],[-18,22],[30,5]
-].forEach(([x,z])=>{
-  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.3,.5,3+Math.random()*2,7),new THREE.MeshLambertMaterial({color:0x5c3317}));
-  tr.position.set(x,1.5,z);tr.castShadow=true;scene.add(tr);
-  const lv=new THREE.Mesh(new THREE.SphereGeometry(2+Math.random()*.8,7,5),new THREE.MeshLambertMaterial({color:[0x2d6a2d,0x3a7a2a,0x256025][Math.floor(Math.random()*3)]}));
-  lv.position.set(x,5+Math.random(),z);lv.castShadow=true;scene.add(lv);
-});
-
-// -------- PARKOUR COURSE 1: STEPPING STONES (right side) --------
-const stoneColors=[0x8B6914,0x7a5a10,0x6a4a0a,0x9B7520,0xaa8030];
-let sx=8,sy=1.5,sz=-8;
-for(let i=0;i<12;i++){
-  const col=stoneColors[i%stoneColors.length];
-  mkPlat(sx,sy,sz,2+Math.random(),.3,2+Math.random(),col);
-  sx+=2.5+Math.random()*1.5;
-  sz+=(Math.random()-.5)*4;
-  sy+=0.4+Math.random()*0.5;
-}
-
-// -------- PARKOUR COURSE 2: SPIRAL TOWER (left side) --------
-for(let i=0;i<14;i++){
-  const angle=(i/14)*Math.PI*4;
-  const radius=6;
-  const px=-20+Math.cos(angle)*radius;
-  const pz=10+Math.sin(angle)*radius;
-  const py=1+i*1.1;
-  mkPlat(px,py,pz,2.5,.3,2.5,0x7a5a10);
-}
-// Top of spiral
-mkPlat(-20,17,10,5,.5,5,0xb8860b);
-mkPillar(-20,17,10,3,.4,0xb8860b);
-
-// -------- PARKOUR COURSE 3: LADDER OF DOOM (center-back) --------
-for(let i=0;i<8;i++){
-  mkStep(-5+i*1.4, 1+i*1.5, -20+i*.5, 2.5, 2.5);
-}
-// Top platform
-mkPlat(5,13.5,-16,5,.5,5,0xaa8030);
-
-// -------- PARKOUR COURSE 4: FLOATING ISLANDS --------
-mkPlat(-15,6,-15,8,.8,8,0x4a7a1a); // grass island
-// Small dirt under island
-mkPlat(-15,4.5,-15,7,.5,7,0x8B6914);
-// Trees on island
-const itr=new THREE.Mesh(new THREE.CylinderGeometry(.2,.35,2.5,7),new THREE.MeshLambertMaterial({color:0x5c3317}));
-itr.position.set(-15,7.5,-15);scene.add(itr);
-const ilv=new THREE.Mesh(new THREE.SphereGeometry(2,7,5),new THREE.MeshLambertMaterial({color:0x2d6a2d}));
-ilv.position.set(-15,10,-15);scene.add(ilv);
-// Bridge to island
-for(let i=0;i<5;i++){
-  mkPlat(-9-i*.8,5.5,-13,1.2,.2,1.2,0x8B6914);
-}
-
-// -------- PARKOUR COURSE 5: VERTICAL WALLS / WALL RUN PADS --------
-mkPlat(20,1,-10,2,.3,2,0x7a5a10);
-mkPlat(22,2.5,-10,2,.3,2,0x7a5a10);
-mkPlat(24,4,-10,2,.3,2,0x7a5a10);
-mkPlat(26,5.5,-10,2,.3,2,0x7a5a10);
-mkPlat(28,7,-10,4,.5,4,0xb8860b); // top reward
-
-// -------- PARKOUR COURSE 6: ZIG ZAG LONG JUMP --------
-const zzColors=[0x9B7520,0x8B6914,0x7a5a10];
-let zzx=-25,zzz=5,zzy=2;
-for(let i=0;i<10;i++){
-  mkPlat(zzx,zzy,zzz,3,.3,1.5,zzColors[i%3]);
-  zzx-=3.5;
-  zzz+=i%2===0?5:-5;
-  zzy+=.3;
-}
-
-// -------- HOUSES --------
-mkHouse(20,0,15, 7,4,5, 0,          0xf5e6c8,0xb03a2e);   // House 1: red roof
-mkHouse(-20,0,20, 6,4,6, Math.PI/6, 0xe8dcc0,0x2e6b3e);   // House 2: green roof
-mkHouse(0,0,-25,  8,5,6, 0,          0xd4c4a0,0x4a3520);   // House 3: dark roof
-mkHouse(-30,0,-5, 6,4,5, Math.PI/4, 0xeee0c0,0x8b2020);   // House 4: far corner
-mkHouse(30,0,-20, 7,4,6, -Math.PI/5,0xf0e8d0,0x1a4a6e);   // House 5: blue roof
-
-// -------- BENCHES (around map) --------
-mkBench(4,0,3,  0);
-mkBench(-4,0,3, Math.PI);
-mkBench(3,0,-4, Math.PI/2);
-mkBench(-3,0,-4,Math.PI/2);
-// On top of houses
-mkBench(20,4,15, Math.PI/4);
-// Near spiral tower top
-mkBench(-22,17,10, 0);
-// Near floating island
-mkBench(-17,6.5,-13, Math.PI/3);
-// Village benches
-mkBench(18,0,13, Math.PI/8);
-mkBench(22,0,13,-Math.PI/8);
-mkBench(-22,0,18, 0);
-mkBench(-18,0,22, Math.PI/2);
-// Near doom ladder
-mkBench(6,13.5,-16, 0);
-
-// -------- ROCKS / DECORATION --------
-for(let i=0;i<20;i++){
-  const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.3+Math.random()*.7,0),new THREE.MeshLambertMaterial({color:0x777777}));
-  r.position.set((Math.random()-.5)*70,.3,(Math.random()-.5)*70);
-  r.rotation.set(Math.random(2),Math.random(2),Math.random(2));
-  r.castShadow=true;scene.add(r);
-}
-
-// -------- PILLARS / ARCHES --------
-mkPillar(10,0,10,5,.4,0x888888);
-mkPillar(-10,0,10,5,.4,0x888888);
-// Arch beam
-const arch=new THREE.Mesh(new THREE.BoxGeometry(.5,20.5,.4),new THREE.MeshLambertMaterial({color:0x888888}));
-arch.position.set(0,5.25,10);arch.rotation.z=Math.PI/2;arch.castShadow=true;scene.add(arch);
-
-// -------- LAMP POSTS --------
 function mkLamp(x,z){
+  const g=new THREE.Group();
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.1,4,6),new THREE.MeshLambertMaterial({color:0x333333}));
-  pole.position.set(x,2,z);scene.add(pole);
+  pole.position.y=2;g.add(pole);
   const top=new THREE.Mesh(new THREE.SphereGeometry(.25,8,6),new THREE.MeshLambertMaterial({color:0xffff99,emissive:0xffff44,emissiveIntensity:.5}));
-  top.position.set(x,4.2,z);scene.add(top);
-  // Point light
-  const pl=new THREE.PointLight(0xffff88,.8,12);
-  pl.position.set(x,4,z);scene.add(pl);
+  top.position.y=4.2;g.add(top);
+  const pl=new THREE.PointLight(0xffff88,.8,12);pl.position.y=4;g.add(pl);
+  g.position.set(x,0,z);scene.add(g);worldObjects.push(g);
 }
-mkLamp(5,0);mkLamp(-5,0);mkLamp(0,5);mkLamp(0,-5);
-mkLamp(18,14);mkLamp(-18,18);mkLamp(18,-18);
+
+function addTree(x,z,scale=1){
+  const g=new THREE.Group();
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.3*scale,.5*scale,(3+Math.random()*2)*scale,7),new THREE.MeshLambertMaterial({color:0x5c3317}));
+  tr.position.y=1.5*scale;tr.castShadow=true;g.add(tr);
+  const lv=new THREE.Mesh(new THREE.SphereGeometry((2+Math.random()*.8)*scale,7,5),new THREE.MeshLambertMaterial({color:[0x2d6a2d,0x3a7a2a,0x256025][Math.floor(Math.random()*3)]}));
+  lv.position.y=(5+Math.random())*scale;lv.castShadow=true;g.add(lv);
+  g.position.set(x,0,z);scene.add(g);worldObjects.push(g);
+}
+
+// ---- ROSE ----
+function mkRose(x,y,z){
+  const g=new THREE.Group();
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.03,.04,.6,6),new THREE.MeshLambertMaterial({color:0x2d6a2d}));
+  stem.position.y=.3;g.add(stem);
+  const bloom=new THREE.Mesh(new THREE.SphereGeometry(.18,7,5),new THREE.MeshLambertMaterial({color:0xe83c6a}));
+  bloom.position.y=.68;g.add(bloom);
+  // Petals
+  for(let i=0;i<5;i++){
+    const p=new THREE.Mesh(new THREE.SphereGeometry(.1,5,4),new THREE.MeshLambertMaterial({color:0xff5f8a}));
+    const a=(i/5)*Math.PI*2;
+    p.position.set(Math.cos(a)*.14,.72,Math.sin(a)*.14);
+    g.add(p);
+  }
+  // Leaf
+  const leaf=new THREE.Mesh(new THREE.BoxGeometry(.25,.04,.12),new THREE.MeshLambertMaterial({color:0x2d8a2d}));
+  leaf.position.set(.1,.25,0);leaf.rotation.z=.4;g.add(leaf);
+  g.position.set(x,y,z);scene.add(g);worldObjects.push(g);
+}
+
+// ---- SIGN ----
+function mkSign(x,y,z,rot=0,initText="Edit me!"){
+  const g=new THREE.Group();
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,1.5,6),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+  post.position.y=.75;g.add(post);
+  const board=new THREE.Mesh(new THREE.BoxGeometry(1.4,.8,.1),new THREE.MeshLambertMaterial({color:0xd4a85a}));
+  board.position.y=1.7;g.add(board);
+  const border=new THREE.Mesh(new THREE.BoxGeometry(1.5,.9,.08),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+  border.position.y=1.7;border.position.z=.01;g.add(border);
+  g.position.set(x,y,z);g.rotation.y=rot;scene.add(g);worldObjects.push(g);
+
+  // Text sprite
+  const spr=makeSignSprite(initText);
+  spr.position.set(x,y+1.7,z);
+  scene.add(spr);worldObjects.push(spr);
+
+  signObjects.push({group:g,sprite:spr,text:initText,
+    pos:new THREE.Vector3(x,y+1.7,z)});
+}
+
+function makeSignSprite(text){
+  const cv=document.createElement("canvas");
+  cv.width=256;cv.height=128;
+  const ctx=cv.getContext("2d");
+  ctx.fillStyle="rgba(212,168,90,0)";ctx.fillRect(0,0,256,128);
+  ctx.font="bold 22px Nunito,sans-serif";
+  ctx.textAlign="center";ctx.fillStyle="#3a1a00";
+  // Word wrap
+  const words=text.split(" ");let line="",lines=[],y=36;
+  words.forEach(w=>{
+    const test=line?line+" "+w:w;
+    if(ctx.measureText(test).width>220&&line){lines.push(line);line=w;}
+    else line=test;
+  });
+  lines.push(line);
+  lines.forEach((l,i)=>ctx.fillText(l,128,36+i*30));
+  const tex=new THREE.CanvasTexture(cv);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  spr.scale.set(1.4,.7,1);
+  spr._cv=cv;spr._tex=tex;
+  return spr;
+}
+
+function refreshSignSprite(signObj){
+  const cv=signObj.sprite._cv;
+  const ctx=cv.getContext("2d");
+  ctx.clearRect(0,0,256,128);
+  ctx.font="bold 22px Nunito,sans-serif";
+  ctx.textAlign="center";ctx.fillStyle="#3a1a00";
+  const words=signObj.text.split(" ");let line="",lines=[];
+  words.forEach(w=>{
+    const test=line?line+" "+w:w;
+    if(ctx.measureText(test).width>220&&line){lines.push(line);line=w;}
+    else line=test;
+  });
+  lines.push(line);
+  lines.forEach((l,i)=>ctx.fillText(l,128,36+i*30));
+  signObj.sprite._tex.needsUpdate=true;
+}
+
+// ---- CLEAR MAP ----
+function clearWorld(){
+  worldObjects.forEach(o=>scene.remove(o));
+  worldObjects=[];
+  signObjects=[];
+  platforms.length=0;
+}
+
+// =====================================================
+//   MAP DEFINITIONS
+// =====================================================
+function buildMap(mapId){
+  clearWorld();
+  currentMapId=mapId;
+
+  if(mapId==='baseplate'){
+    // Giant flat green plate
+    mkPlat(0,.25,0,80,.5,80,0x4a8a1a);
+    // Decorative border tiles
+    for(let i=-4;i<=4;i++){
+      mkPlat(i*10,.3,40,9,.1,1,0x2a6a0a);
+      mkPlat(i*10,.3,-40,9,.1,1,0x2a6a0a);
+      mkPlat(40,.3,i*10,1,.1,9,0x2a6a0a);
+      mkPlat(-40,.3,i*10,1,.1,9,0x2a6a0a);
+    }
+    // Some scattered trees
+    [[8,8],[-8,8],[8,-8],[-8,-8],[15,0],[-15,0],[0,15],[0,-15],
+     [20,10],[-20,10],[20,-10],[-20,-10]].forEach(([x,z])=>addTree(x,z));
+    // Lamp posts
+    mkLamp(10,10);mkLamp(-10,10);mkLamp(10,-10);mkLamp(-10,-10);
+    // A few rocks
+    for(let i=0;i<8;i++){
+      const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.4+Math.random()*.5,0),new THREE.MeshLambertMaterial({color:0x888888}));
+      r.position.set((Math.random()-.5)*60,.3,(Math.random()-.5)*60);
+      r.castShadow=true;scene.add(r);worldObjects.push(r);
+    }
+
+  } else if(mapId==='parkour'){
+    // Ground starter
+    mkPlat(0,.25,0,8,.5,8,0x9B7520);
+
+    // COURSE 1: Stepping stones going forward-right
+    let sx=6,sy=1,sz=-4;
+    for(let i=0;i<14;i++){
+      mkPlat(sx,sy,sz,2+Math.random()*.8,.3,2+Math.random()*.8,[0x8B6914,0x7a5a10,0x6a4a0a,0x9B7520][i%4]);
+      sx+=2.4+Math.random()*1.2;sz+=(Math.random()-.5)*3.5;sy+=0.5+Math.random()*.5;
+    }
+    // Checkpoint 1 top
+    mkPlat(sx-2,sy+.5,sz,5,.5,5,0xb8860b);
+    mkLamp(sx-2,sz);
+
+    // COURSE 2: Spiral tower
+    for(let i=0;i<16;i++){
+      const a=(i/16)*Math.PI*4,r=7;
+      mkPlat(-18+Math.cos(a)*r,1+i*1.1,-10+Math.sin(a)*r,2.5,.3,2.5,0x7a5a10);
+    }
+    mkPlat(-18,19,-10,6,.5,6,0xb8860b);
+    mkLamp(-18,-10);
+
+    // COURSE 3: Long jump zigzag
+    let zzx=5,zzy=2,zzz=12;
+    for(let i=0;i<12;i++){
+      mkPlat(zzx,zzy,zzz,3,.3,1.5,[0x9B7520,0x8B6914,0x7a5a10][i%3]);
+      zzx+=3.2+(i%2);zzz+=i%2===0?4:-4;zzy+=.35;
+    }
+    mkPlat(zzx-2,zzy+.5,zzz,5,.5,5,0xb8860b);
+
+    // COURSE 4: Wall pads vertical
+    for(let i=0;i<8;i++) mkPlat(22,1+i*1.6,-14,2.5,.3,2.5,0x7a5a10);
+    mkPlat(22,14.5,-14,5,.5,5,0xb8860b);
+
+    // COURSE 5: Floating island chain
+    mkPlat(-8,5,-22,6,.8,6,0x4a7a1a);
+    mkPlat(-8,3.5,-22,5,.5,5,0x8B6914);
+    addTree(-8,-22);
+    for(let i=0;i<4;i++) mkPlat(-4+i*2.2,4.5,-18,1.5,.2,1.5,0x8B6914);
+    for(let i=0;i<4;i++) mkPlat(-14-i*2.2,4.5+i*.5,-22,1.5,.2,1.5,0x8B6914);
+
+    // Trees around
+    [[4,4],[-4,4],[4,-4],[-4,-4],[15,8],[-22,0],[25,-5]].forEach(([x,z])=>addTree(x,z));
+    mkLamp(5,0);mkLamp(-5,0);mkLamp(0,5);
+
+    // Some benches at checkpoints
+    mkBench(2,0,2,0);mkBench(-2,0,2,Math.PI);
+
+  } else if(mapId==='hangout'){
+    // Big soft baseplate — pastel green
+    mkPlat(0,.25,0,60,.5,60,0x5a9a2a);
+
+    // ---- HOUSES ----
+    mkHouse(18,0,12, 7,4,5, 0,         0xf5e6c8,0xb03a2e);
+    mkHouse(-18,0,14, 6,4,6, Math.PI/6,0xe8dcc0,0x2e6b3e);
+    mkHouse(0,0,-20,  7,4.5,6, 0,       0xd4c4a0,0x4a3520);
+    mkHouse(-22,0,-8, 5,4,5, Math.PI/3,0xfef0d0,0x8b2020);
+    mkHouse(22,0,-14, 6,4,5, -Math.PI/5,0xf0e8d0,0x1a4a6e);
+
+    // ---- BENCHES ----
+    mkBench(4,0,4,0);     mkBench(-4,0,4,Math.PI);
+    mkBench(4,0,-4,0);    mkBench(-4,0,-4,Math.PI);
+    mkBench(10,0,0,Math.PI/2); mkBench(-10,0,0,Math.PI/2);
+    mkBench(18,0,8,Math.PI/4);mkBench(-18,0,8,-Math.PI/4);
+    mkBench(0,0,10,0);    mkBench(0,0,-10,Math.PI);
+    mkBench(22,4,12,0);   // on house roof
+
+    // ---- ROSES GARDEN ----
+    const rosePositions=[
+      [2,0,7],[3,0,7],[4,0,7],[2,0,8],[3,0,8],
+      [-2,0,7],[-3,0,7],[-4,0,7],[-2,0,8],[-3,0,8],
+      [0,0,6],[1,0,6],[-1,0,6],
+      [6,0,3],[6,0,4],[6,0,5],
+      [-6,0,3],[-6,0,4],[-6,0,5],
+      [0,0,-6],[1,0,-6],[-1,0,-6],[0,0,-7],
+    ];
+    rosePositions.forEach(([x,y,z])=>mkRose(x,y,z));
+
+    // ---- SIGNS ----
+    mkSign(0,0,5,0,"Welcome! 🐒");
+    mkSign(7,0,0,Math.PI/2,"Rose Garden 🌹");
+    mkSign(-7,0,0,-Math.PI/2,"Hangout Zone!");
+    mkSign(0,0,-5,Math.PI,"Have fun! 🌸");
+    mkSign(15,0,12,Math.PI/4,"House #1");
+
+    // ---- TREES ----
+    [[10,10],[-10,10],[10,-10],[-10,-10],
+     [20,0],[-20,0],[0,20],[0,-20],
+     [25,15],[-25,12],[24,-18],[-22,-15]].forEach(([x,z])=>addTree(x,z));
+
+    // ---- LAMPS ----
+    mkLamp(6,6);mkLamp(-6,6);mkLamp(6,-6);mkLamp(-6,-6);
+    mkLamp(14,0);mkLamp(-14,0);mkLamp(0,14);mkLamp(0,-14);
+    mkLamp(18,12);mkLamp(-18,14);
+
+    // ---- FOUNTAIN center ----
+    mkPlat(0,.5,0,6,.2,6,0x88aacc); // water base
+    mkPillar(0,.7,0,1.5,.5,0xbbbbdd);
+    mkPlat(0,2.2,0,2,.15,2,0x88aacc);
+    // Flower border around fountain
+    for(let i=0;i<8;i++){
+      const a=(i/8)*Math.PI*2;
+      mkRose(Math.cos(a)*3.5,0,Math.sin(a)*3.5);
+    }
+    // Ring of benches around fountain
+    [0,Math.PI/2,Math.PI,3*Math.PI/2].forEach((a,i)=>{
+      mkBench(Math.cos(a+Math.PI/4)*5,0,Math.sin(a+Math.PI/4)*5,a+Math.PI/4);
+    });
+
+    // Path stones
+    for(let i=-4;i<=4;i++){
+      const r=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
+      r.position.set(i*2.5,.3,0);r.receiveShadow=true;scene.add(r);worldObjects.push(r);
+      const r2=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
+      r2.position.set(0,.3,i*2.5);r2.receiveShadow=true;scene.add(r2);worldObjects.push(r2);
+    }
+  }
+}
+
+// Build default map immediately (will be rebuilt when joining)
+buildMap('baseplate');
 
 // =====================================================
 //   MONKEY MESH
@@ -1140,6 +1296,7 @@ function loop(){
   });
 
   renderer.render(scene,camera);
+  checkSignProximity();
 }
 loop();
 
@@ -1354,8 +1511,9 @@ function createLobby(){
   const{playerName,color}=getInfo(); myName=playerName; myColor=color;
   ws.send(JSON.stringify({
     type:"create_lobby",playerName,color,
-    lobbyName:document.getElementById("lobbyName").value.trim()||"My Jungle",
-    isPrivate:document.getElementById("isPrivate").checked
+    lobbyName:document.getElementById("lobbyName").value.trim()||"My Room",
+    isPrivate:document.getElementById("isPrivate").checked,
+    mapId:selectedMapId
   }));
 }
 function joinLobbyByCode(code){
@@ -1410,6 +1568,9 @@ function enterGame(msg){
   myHp=MAX_HP; isDead=false; attackCooldown=0;
   selectedSlot=0; selectSlot(0);
   updateMyHp(MAX_HP);
+
+  // Build the map for this lobby
+  buildMap(msg.mapId || 'baseplate');
 
   // Set myId FIRST before filtering players
   myId = msg.myId;
@@ -1555,6 +1716,59 @@ function switchTab(name){
   document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
   if(name==="browse")refreshLobbies();
+}
+
+let selectedMapId = 'baseplate';
+function selectMap(id){
+  selectedMapId=id;
+  document.querySelectorAll(".map-card").forEach(c=>c.classList.remove("selected"));
+  document.getElementById("map-"+id).classList.add("selected");
+}
+
+// ---- SIGN INTERACTION ----
+let _nearSignIdx = -1;
+let editingSignIdx = null;
+function checkSignProximity(){
+  if(!isInGame||escOpen||chatOpen) return;
+  let closest=null, closestDist=3.5, closestIdx=-1;
+  signObjects.forEach((s,i)=>{
+    const d=pPos.distanceTo(s.pos);
+    if(d<closestDist){closestDist=d;closest=s;closestIdx=i;}
+  });
+  const prompt=document.getElementById("interactPrompt");
+  const mobileBtn=document.getElementById("editSignMobileBtn");
+  _nearSignIdx=closestIdx;
+  if(closest){
+    prompt.style.display="block";
+    prompt.textContent=isMobile?"Tap ✏️ to edit sign":"Press E to edit sign";
+    if(isMobile&&mobileBtn) mobileBtn.style.display="flex";
+    if(keys["KeyE"]&&!escOpen&&!chatOpen){keys["KeyE"]=false;openSign(closestIdx);}
+  } else {
+    prompt.style.display="none";
+    if(mobileBtn) mobileBtn.style.display="none";
+  }
+}
+function checkAndEditSign(){
+  if(_nearSignIdx>=0) openSign(_nearSignIdx);
+}
+
+function openSign(idx){
+  editingSignIdx=idx;
+  document.getElementById("signText").value=signObjects[idx].text;
+  document.getElementById("signEditor").style.display="flex";
+  document.exitPointerLock();
+}
+function closeSign(){
+  editingSignIdx=null;
+  document.getElementById("signEditor").style.display="none";
+  if(!isMobile)setTimeout(()=>canvas.requestPointerLock(),100);
+}
+function saveSign(){
+  if(editingSignIdx===null) return;
+  const txt=document.getElementById("signText").value.trim()||"…";
+  signObjects[editingSignIdx].text=txt;
+  refreshSignSprite(signObjects[editingSignIdx]);
+  closeSign();
 }
 function showErr(msg){
   const el=document.getElementById("errorMsg");
