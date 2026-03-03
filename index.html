@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="mobile-web-app-capable" content="yes"/>
-<title>🐒 Gorilla Tag Online</title>
+<title>Lowitopia</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -779,143 +779,156 @@ function buildMap(mapId){
   currentMapId=mapId;
 
   if(mapId==='baseplate'){
-    // Giant flat green plate
     mkPlat(0,.25,0,80,.5,80,0x4a8a1a);
-    // Decorative border tiles
     for(let i=-4;i<=4;i++){
-      mkPlat(i*10,.3,40,9,.1,1,0x2a6a0a);
-      mkPlat(i*10,.3,-40,9,.1,1,0x2a6a0a);
-      mkPlat(40,.3,i*10,1,.1,9,0x2a6a0a);
-      mkPlat(-40,.3,i*10,1,.1,9,0x2a6a0a);
+      mkPlat(i*10,.3,40,9,.1,1,0x2a6a0a);mkPlat(i*10,.3,-40,9,.1,1,0x2a6a0a);
+      mkPlat(40,.3,i*10,1,.1,9,0x2a6a0a);mkPlat(-40,.3,i*10,1,.1,9,0x2a6a0a);
     }
-    // Some scattered trees
     [[8,8],[-8,8],[8,-8],[-8,-8],[15,0],[-15,0],[0,15],[0,-15],
      [20,10],[-20,10],[20,-10],[-20,-10]].forEach(([x,z])=>addTree(x,z));
-    // Lamp posts
     mkLamp(10,10);mkLamp(-10,10);mkLamp(10,-10);mkLamp(-10,-10);
-    // A few rocks
     for(let i=0;i<8;i++){
-      const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.4+Math.random()*.5,0),new THREE.MeshLambertMaterial({color:0x888888}));
-      r.position.set((Math.random()-.5)*60,.3,(Math.random()-.5)*60);
-      r.castShadow=true;scene.add(r);worldObjects.push(r);
+      const r=new THREE.Mesh(new THREE.DodecahedronGeometry(.5,0),new THREE.MeshLambertMaterial({color:0x888888}));
+      const rx=(i%4)*16-24, rz=Math.floor(i/4)*16-8;
+      r.position.set(rx,.3,rz);r.castShadow=true;scene.add(r);worldObjects.push(r);
     }
 
   } else if(mapId==='parkour'){
-    // Ground starter
-    mkPlat(0,.25,0,8,.5,8,0x9B7520);
+    // ── STARTER PLATFORM ──
+    mkPlat(0,0.5,0,10,1,10,0x7a9a20);
 
-    // COURSE 1: Stepping stones going forward-right
-    let sx=6,sy=1,sz=-4;
-    for(let i=0;i<14;i++){
-      mkPlat(sx,sy,sz,2+Math.random()*.8,.3,2+Math.random()*.8,[0x8B6914,0x7a5a10,0x6a4a0a,0x9B7520][i%4]);
-      sx+=2.4+Math.random()*1.2;sz+=(Math.random()-.5)*3.5;sy+=0.5+Math.random()*.5;
+    // ── COURSE A: STEPPING STONES ── (fixed positions, increasing gaps)
+    const stepsA=[
+      [14,1.5,0],[18,2,1],[22,2.5,-1],[26,3,2],
+      [30,3.5,0],[34,4,-2],[38,4.5,1],[42,5,-1],[46,5.5,2],[50,6,0],
+    ];
+    stepsA.forEach(([x,y,z])=>mkPlat(x,y,z,3,0.5,3,0x8B6914));
+    mkPlat(56,7,0,8,1,8,0xb8860b); // Checkpoint A
+    mkLamp(56,4); mkBench(53,7,0,0); mkBench(59,7,0,Math.PI);
+
+    // ── COURSE B: SPIRAL TOWER ── (18 fixed pads)
+    for(let i=0;i<18;i++){
+      const a=(i/18)*Math.PI*4.5, r=8;
+      mkPlat(-15+Math.cos(a)*r, 1+i*1.2, 20+Math.sin(a)*r, 2.8,0.4,2.8, i%2===0?0x7a5a10:0x6a4a0a);
     }
-    // Checkpoint 1 top
-    mkPlat(sx-2,sy+.5,sz,5,.5,5,0xb8860b);
-    mkLamp(sx-2,sz);
+    mkPlat(-15,23,20,7,1,7,0xb8860b); // Checkpoint B
+    mkLamp(-15,20); mkBench(-18,23,20,0);
 
-    // COURSE 2: Spiral tower
-    for(let i=0;i<16;i++){
-      const a=(i/16)*Math.PI*4,r=7;
-      mkPlat(-18+Math.cos(a)*r,1+i*1.1,-10+Math.sin(a)*r,2.5,.3,2.5,0x7a5a10);
-    }
-    mkPlat(-18,19,-10,6,.5,6,0xb8860b);
-    mkLamp(-18,-10);
+    // ── COURSE C: ZIGZAG LONG JUMP ── (fixed alternating pads)
+    const zigRows=[
+      [-22,2,16],[-26,2.7,22],[-30,3.4,16],[-34,4.1,22],
+      [-38,4.8,16],[-42,5.5,22],[-46,6.2,16],[-50,6.9,22],
+      [-54,7.6,16],[-58,8.3,22],
+    ];
+    zigRows.forEach(([x,y,z])=>mkPlat(x,y,z,2.8,0.4,2.8,0x9B7520));
+    mkPlat(-62,9.5,19,8,1,8,0xb8860b); // Checkpoint C
 
-    // COURSE 3: Long jump zigzag
-    let zzx=5,zzy=2,zzz=12;
-    for(let i=0;i<12;i++){
-      mkPlat(zzx,zzy,zzz,3,.3,1.5,[0x9B7520,0x8B6914,0x7a5a10][i%3]);
-      zzx+=3.2+(i%2);zzz+=i%2===0?4:-4;zzy+=.35;
-    }
-    mkPlat(zzx-2,zzy+.5,zzz,5,.5,5,0xb8860b);
+    // ── COURSE D: VERTICAL CLIMB ──
+    const climbPads=[
+      [20,2,25],[22.5,4,25],[20,6,25],[22.5,8,25],
+      [20,10,25],[22.5,12,25],[20,14,25],[22.5,16,25],
+    ];
+    climbPads.forEach(([x,y,z])=>mkPlat(x,y,z,3,0.4,3,0x6a4a0a));
+    mkPlat(21,18,25,6,1,6,0xb8860b); // Checkpoint D
+    mkLamp(21,30); mkBench(19,18,25,0);
 
-    // COURSE 4: Wall pads vertical
-    for(let i=0;i<8;i++) mkPlat(22,1+i*1.6,-14,2.5,.3,2.5,0x7a5a10);
-    mkPlat(22,14.5,-14,5,.5,5,0xb8860b);
+    // ── COURSE E: FLOATING ISLANDS ──
+    mkPlat(10,5,-20,6,0.8,6,0x4a7a1a);
+    mkPlat(10,3.8,-20,5.5,0.5,5.5,0x8B6914); // dirt under
+    mkPlat(0,6,-26,4,0.7,4,0x5a8a2a);
+    mkPlat(-10,7,-20,5,0.7,5,0x4a7a1a);
+    mkPlat(-18,8,-26,4,0.6,4,0x5a8a2a);
+    mkPlat(-26,9,-20,6,1,6,0x4a7a1a); // Final island
+    // Bridge planks
+    mkPlat(14,4.6,-18,2,0.2,1.5,0x8B6914);
+    mkPlat(5,5.6,-24,2,0.2,1.5,0x8B6914);
+    mkPlat(-5,6.6,-24,2,0.2,1.5,0x8B6914);
+    mkPlat(-14,7.6,-24,2,0.2,1.5,0x8B6914);
+    mkPlat(-22,8.6,-22,2,0.2,1.5,0x8B6914);
+    addTree(-26,-20); addTree(10,-20);
+    mkBench(-27,9,-22,0); mkBench(-25,9,-18,Math.PI);
+    mkLamp(-26,-20);
 
-    // COURSE 5: Floating island chain
-    mkPlat(-8,5,-22,6,.8,6,0x4a7a1a);
-    mkPlat(-8,3.5,-22,5,.5,5,0x8B6914);
-    addTree(-8,-22);
-    for(let i=0;i<4;i++) mkPlat(-4+i*2.2,4.5,-18,1.5,.2,1.5,0x8B6914);
-    for(let i=0;i<4;i++) mkPlat(-14-i*2.2,4.5+i*.5,-22,1.5,.2,1.5,0x8B6914);
-
-    // Trees around
-    [[4,4],[-4,4],[4,-4],[-4,-4],[15,8],[-22,0],[25,-5]].forEach(([x,z])=>addTree(x,z));
-    mkLamp(5,0);mkLamp(-5,0);mkLamp(0,5);
-
-    // Some benches at checkpoints
-    mkBench(2,0,2,0);mkBench(-2,0,2,Math.PI);
+    // Trees & lamps
+    [[5,8],[5,-8],[60,5],[60,-5]].forEach(([x,z])=>addTree(x,z));
+    mkLamp(5,4); mkLamp(-5,4);
 
   } else if(mapId==='hangout'){
-    // Big soft baseplate — pastel green
-    mkPlat(0,.25,0,60,.5,60,0x5a9a2a);
+    // ── GROUND ──
+    mkPlat(0,.25,0,70,.5,70,0x5a9a2a);
 
-    // ---- HOUSES ----
-    mkHouse(18,0,12, 7,4,5, 0,         0xf5e6c8,0xb03a2e);
-    mkHouse(-18,0,14, 6,4,6, Math.PI/6,0xe8dcc0,0x2e6b3e);
-    mkHouse(0,0,-20,  7,4.5,6, 0,       0xd4c4a0,0x4a3520);
-    mkHouse(-22,0,-8, 5,4,5, Math.PI/3,0xfef0d0,0x8b2020);
-    mkHouse(22,0,-14, 6,4,5, -Math.PI/5,0xf0e8d0,0x1a4a6e);
-
-    // ---- BENCHES ----
-    mkBench(4,0,4,0);     mkBench(-4,0,4,Math.PI);
-    mkBench(4,0,-4,0);    mkBench(-4,0,-4,Math.PI);
-    mkBench(10,0,0,Math.PI/2); mkBench(-10,0,0,Math.PI/2);
-    mkBench(18,0,8,Math.PI/4);mkBench(-18,0,8,-Math.PI/4);
-    mkBench(0,0,10,0);    mkBench(0,0,-10,Math.PI);
-    mkBench(22,4,12,0);   // on house roof
-
-    // ---- ROSES GARDEN ----
-    const rosePositions=[
-      [2,0,7],[3,0,7],[4,0,7],[2,0,8],[3,0,8],
-      [-2,0,7],[-3,0,7],[-4,0,7],[-2,0,8],[-3,0,8],
-      [0,0,6],[1,0,6],[-1,0,6],
-      [6,0,3],[6,0,4],[6,0,5],
-      [-6,0,3],[-6,0,4],[-6,0,5],
-      [0,0,-6],[1,0,-6],[-1,0,-6],[0,0,-7],
-    ];
-    rosePositions.forEach(([x,y,z])=>mkRose(x,y,z));
-
-    // ---- SIGNS ----
-    mkSign(0,0,5,0,"Welcome! 🐒");
-    mkSign(7,0,0,Math.PI/2,"Rose Garden 🌹");
-    mkSign(-7,0,0,-Math.PI/2,"Hangout Zone!");
-    mkSign(0,0,-5,Math.PI,"Have fun! 🌸");
-    mkSign(15,0,12,Math.PI/4,"House #1");
-
-    // ---- TREES ----
-    [[10,10],[-10,10],[10,-10],[-10,-10],
-     [20,0],[-20,0],[0,20],[0,-20],
-     [25,15],[-25,12],[24,-18],[-22,-15]].forEach(([x,z])=>addTree(x,z));
-
-    // ---- LAMPS ----
-    mkLamp(6,6);mkLamp(-6,6);mkLamp(6,-6);mkLamp(-6,-6);
-    mkLamp(14,0);mkLamp(-14,0);mkLamp(0,14);mkLamp(0,-14);
-    mkLamp(18,12);mkLamp(-18,14);
-
-    // ---- FOUNTAIN center ----
-    mkPlat(0,.5,0,6,.2,6,0x88aacc); // water base
-    mkPillar(0,.7,0,1.5,.5,0xbbbbdd);
-    mkPlat(0,2.2,0,2,.15,2,0x88aacc);
-    // Flower border around fountain
-    for(let i=0;i<8;i++){
-      const a=(i/8)*Math.PI*2;
-      mkRose(Math.cos(a)*3.5,0,Math.sin(a)*3.5);
+    // ── STONE PATH ──
+    for(let i=-6;i<=6;i++){
+      const s=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
+      s.position.set(i*2.8,.32,0);s.receiveShadow=true;scene.add(s);worldObjects.push(s);
+      const s2=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
+      s2.position.set(0,.32,i*2.8);s2.receiveShadow=true;scene.add(s2);worldObjects.push(s2);
     }
-    // Ring of benches around fountain
-    [0,Math.PI/2,Math.PI,3*Math.PI/2].forEach((a,i)=>{
-      mkBench(Math.cos(a+Math.PI/4)*5,0,Math.sin(a+Math.PI/4)*5,a+Math.PI/4);
-    });
 
-    // Path stones
-    for(let i=-4;i<=4;i++){
-      const r=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
-      r.position.set(i*2.5,.3,0);r.receiveShadow=true;scene.add(r);worldObjects.push(r);
-      const r2=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.08,8),new THREE.MeshLambertMaterial({color:0xccbbaa}));
-      r2.position.set(0,.3,i*2.5);r2.receiveShadow=true;scene.add(r2);worldObjects.push(r2);
+    // ── HOUSES ──
+    mkHouse( 20,0, 16, 7,4,5,  0,          0xf5e6c8,0xb03a2e);
+    mkHouse(-20,0, 16, 6,4,6,  0,          0xe8dcc0,0x2e6b3e);
+    mkHouse(  0,0,-22, 8,5,6,  0,          0xd4c4a0,0x4a3520);
+    mkHouse(-22,0, -8, 6,4,5,  Math.PI/6,  0xfef0d0,0x8b2020);
+    mkHouse( 22,0,-14, 6,4,5, -Math.PI/6,  0xf0e8d0,0x1a4a6e);
+
+    // ── BENCHES – centre ──
+    mkBench( 5,0, 5,  0);       mkBench(-5,0, 5, Math.PI);
+    mkBench( 5,0,-5,  0);       mkBench(-5,0,-5, Math.PI);
+    mkBench( 10,0, 0, Math.PI/2); mkBench(-10,0,0,-Math.PI/2);
+    mkBench(  0,0, 10, 0);      mkBench(  0,0,-10, Math.PI);
+    // near houses
+    mkBench( 16,0,14,-Math.PI/4); mkBench(24,0,14,  Math.PI/4);
+    mkBench(-16,0,14, Math.PI/4); mkBench(-24,0,14,-Math.PI/4);
+    mkBench(  3,0,-20, 0);      mkBench(-3,0,-20, Math.PI);
+    mkBench( 20,4, 16, 0);  // rooftop bench
+
+    // ── FOUNTAIN CENTER ──
+    mkPlat(0,.45,0,7,.2,7,0x88aacc);
+    mkPillar(0,.65,0,1.6,.55,0xbbccdd);
+    mkPlat(0,2.25,0,2.2,.18,2.2,0x88aacc);
+    for(let i=0;i<10;i++){
+      const a=(i/10)*Math.PI*2;
+      mkRose(Math.cos(a)*4,0,Math.sin(a)*4);
     }
+    for(let i=0;i<4;i++){
+      const a=(i/4)*Math.PI*2+Math.PI/4;
+      mkBench(Math.cos(a)*6.5,0,Math.sin(a)*6.5,a+Math.PI/2);
+    }
+
+    // ── ROSE GARDEN (north) ──
+    for(let rx=-3;rx<=3;rx++) for(let rz=12;rz<=16;rz++) mkRose(rx*1.2,0,rz);
+    // Garden fence
+    for(let fx=-4;fx<=4;fx++){
+      const f=new THREE.Mesh(new THREE.BoxGeometry(.1,.7,.1),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+      f.position.set(fx*1.05,.35,11.3);scene.add(f);worldObjects.push(f);
+      const f2=new THREE.Mesh(new THREE.BoxGeometry(.1,.7,.1),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+      f2.position.set(fx*1.05,.35,16.8);scene.add(f2);worldObjects.push(f2);
+    }
+    for(let fz=11;fz<=17;fz++){
+      const f=new THREE.Mesh(new THREE.BoxGeometry(.1,.7,.1),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+      f.position.set(-4.3,.35,fz);scene.add(f);worldObjects.push(f);
+      const f2=new THREE.Mesh(new THREE.BoxGeometry(.1,.7,.1),new THREE.MeshLambertMaterial({color:0x8B5E3C}));
+      f2.position.set(4.3,.35,fz);scene.add(f2);worldObjects.push(f2);
+    }
+
+    // ── SIGNS ──
+    mkSign( 0,0, 4.5,  0,          "🐒 Welcome!");
+    mkSign( 7,0,  0,   Math.PI/2,  "Rose Garden 🌹");
+    mkSign(-7,0,  0,  -Math.PI/2,  "Chill Zone 😎");
+    mkSign( 0,0,-4.5,  Math.PI,    "Have fun! 🌸");
+    mkSign(17,0, 10,   Math.PI/6,  "House 1 🏠");
+    mkSign(-17,0,10,  -Math.PI/6,  "House 2 🏡");
+
+    // ── TREES ──
+    [[12,12],[-12,12],[12,-12],[-12,-12],
+     [22,4],[-22,4],[22,-4],[-22,-4],
+     [0,24],[0,-24],[28,12],[-28,12]].forEach(([x,z])=>addTree(x,z));
+
+    // ── LAMPS ──
+    mkLamp( 7, 7);mkLamp(-7, 7);mkLamp( 7,-7);mkLamp(-7,-7);
+    mkLamp(15, 0);mkLamp(-15, 0);mkLamp( 0,15);mkLamp( 0,-15);
+    mkLamp(20,12);mkLamp(-20,12);mkLamp(20,-12);mkLamp(-20,-12);
   }
 }
 
@@ -1254,6 +1267,12 @@ function loop(){
   if(pPos.y<gy+1.0){pPos.y=gy+1.0; if(pVel.y<0)pVel.y=0;}
   pPos.x=Math.max(-90,Math.min(90,pPos.x));
   pPos.z=Math.max(-90,Math.min(90,pPos.z));
+
+  // KILL ZONE — fell off map
+  if(pPos.y < -6 && !isDead){
+    updateMyHp(0);
+    addKillFeedMsg("💀 You fell into the void!");
+  }
 
   // Update local player mesh position + body rotation
   if(localMesh){
